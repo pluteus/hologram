@@ -1,0 +1,1446 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>4方向画像結合 (プレイリスト対応版)</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: sans-serif; background: #1a1a2e; color: #eee; padding: 10px; margin: 0; overflow-x: hidden; }
+        h1 { text-align: center; color: #00d4aa; margin-bottom: 5px; font-size: 1.2rem; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        #status { font-size: 11px; color: #ffca28; text-align: center; height: 1.5em; margin-bottom: 5px; }
+
+        /* 一括読み込みエリア */
+        .bulk-upload-area {
+            background: #0d1b2a;
+            border: 2px dashed #00d4aa;
+            border-radius: 10px;
+            padding: 14px 20px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            flex-wrap: wrap;
+        }
+        .bulk-upload-area .bulk-label {
+            font-size: 12px;
+            color: #00d4aa;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+        .bulk-upload-area .bulk-hint {
+            font-size: 11px;
+            color: #aaa;
+            flex: 1;
+        }
+        .bulk-btn {
+            padding: 8px 18px;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            background: #00d4aa;
+            color: #1a1a2e;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+        .bulk-btn:hover { background: #00b894; }
+
+        .upload-section { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 15px; }
+        .upload-box { background: #16213e; border: 2px dashed #334257; border-radius: 10px; padding: 10px; text-align: center; cursor: pointer; position: relative; min-height: 80px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .upload-box.has-image { border-color: #00d4aa; background: #0d1b2a; border-style: solid; }
+        .upload-box input { display: none; }
+        .preview-img { max-width: 70px; max-height: 50px; margin-top: 5px; border-radius: 4px; pointer-events: none; }
+
+        .preview-section { background: #16213e; border-radius: 12px; padding: 15px; text-align: center; position: relative; }
+
+        /* 編集プレビュー */
+        #edit-preview-wrapper { position: relative; display: inline-block; width: 100%; max-width: fit-content; touch-action: none; background: #000; border-radius: 8px; overflow: hidden; border: 1px solid #334257; cursor: crosshair; }
+        #edit-preview-wrapper canvas { display: block; width: 100%; height: auto; max-height: 70vh; object-fit: contain; }
+
+        /* フルスクリーン設定 */
+        #edit-preview-wrapper:fullscreen { width: 100vw; height: 100vh; max-width: none; display: flex; align-items: center; justify-content: center; }
+        #edit-preview-wrapper:-webkit-full-screen { width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
+
+        /* iOS/iPad向け疑似フルスクリーン */
+        #edit-preview-wrapper.pseudo-fullscreen {
+            position: fixed !important;
+            top: 0 !important; left: 0 !important;
+            width: 100vw !important; height: 100dvh !important;
+            max-width: none !important;
+            z-index: 9999;
+            border-radius: 0 !important;
+            border: none !important;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+        }
+        #edit-preview-wrapper.pseudo-fullscreen canvas {
+            max-height: 100dvh;
+            width: auto;
+            max-width: 100vw;
+        }
+
+        /* プレイリストプレビューフルスクリーン */
+        #playlist-preview-wrapper:fullscreen { width: 100vw; height: 100vh; max-width: none; display: flex; align-items: center; justify-content: center; }
+        #playlist-preview-wrapper:-webkit-full-screen { width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
+
+        #playlist-preview-wrapper.pseudo-fullscreen {
+            position: fixed !important;
+            top: 0 !important; left: 0 !important;
+            width: 100vw !important; height: 100dvh !important;
+            max-width: none !important;
+            z-index: 9999;
+            border-radius: 0 !important;
+            border: none !important;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+        }
+        #playlist-preview-wrapper.pseudo-fullscreen canvas {
+            max-height: 100dvh;
+            width: auto;
+            max-width: 100vw;
+        }
+
+        /* プレイリストプレビュー（常時表示） */
+        .playlist-preview-section {
+            background: #0d1b2a;
+            border: 2px solid #334257;
+            border-radius: 12px;
+            padding: 15px;
+            margin-top: 15px;
+            text-align: center;
+        }
+        .playlist-preview-section h2 {
+            color: #00d4aa;
+            font-size: 14px;
+            margin: 0 0 12px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .playlist-preview-section h2 .playing-badge {
+            background: #e94560;
+            color: #fff;
+            border-radius: 10px;
+            font-size: 10px;
+            padding: 2px 8px;
+            display: none;
+        }
+        .playlist-preview-section h2 .playing-badge.show {
+            display: inline-block;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        #playlist-preview-wrapper {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+            max-width: fit-content;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid #334257;
+        }
+        #playlist-preview-wrapper canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            max-height: 60vh;
+            object-fit: contain;
+        }
+        .playlist-preview-info {
+            margin-top: 10px;
+            color: #eee;
+        }
+        .playlist-preview-info .plp-name {
+            font-weight: bold;
+            color: #00d4aa;
+            font-size: 14px;
+        }
+        .playlist-preview-info .plp-params {
+            color: #888;
+            font-size: 11px;
+            margin-top: 4px;
+        }
+
+        .fullscreen-btn { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.6); border: 1px solid #555; color: #fff; width: 44px; height: 44px; border-radius: 8px; cursor: pointer; z-index: 100; font-size: 1.5rem; display: flex; align-items: center; justify-content: center; touch-action: auto; pointer-events: all; -webkit-tap-highlight-color: transparent; }
+
+        .option-panel { background: rgba(0,0,0,0.4); padding: 12px; border-radius: 8px; margin-bottom: 15px; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; text-align: left; }
+        .option-item { display: flex; flex-direction: column; gap: 4px; }
+        .option-item label { font-size: 11px; color: #00d4aa; font-weight: bold; }
+
+        .remove-btn { position: absolute; top: 5px; right: 5px; background: #e94560; color: white; border: none; border-radius: 50%; width: 22px; height: 22px; cursor: pointer; z-index: 10; font-weight: bold; }
+        .btn { padding: 12px 25px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; background: #00d4aa; color: #1a1a2e; width: 100%; max-width: 300px; margin-top: 10px; }
+
+        /* 自動割り当てバッジ */
+        .auto-badge {
+            display: inline-block;
+            background: #00d4aa33;
+            color: #00d4aa;
+            border: 1px solid #00d4aa66;
+            border-radius: 4px;
+            font-size: 10px;
+            padding: 1px 5px;
+            margin-top: 3px;
+        }
+
+        /* ===== プレイリスト機能 ===== */
+        .playlist-section {
+            background: #0d1b2a;
+            border: 2px solid #334257;
+            border-radius: 12px;
+            padding: 15px;
+            margin-top: 15px;
+            margin-bottom: 15px;
+        }
+        .playlist-section h2 {
+            color: #00d4aa;
+            font-size: 14px;
+            margin: 0 0 12px 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .playlist-section h2 .playlist-count {
+            background: #00d4aa33;
+            color: #00d4aa;
+            border: 1px solid #00d4aa66;
+            border-radius: 10px;
+            font-size: 11px;
+            padding: 2px 8px;
+        }
+
+        /* プレイリスト追加ボタンエリア */
+        .playlist-add-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .playlist-add-row input[type="text"] {
+            flex: 1;
+            min-width: 150px;
+            padding: 8px 12px;
+            border: 1px solid #334257;
+            border-radius: 6px;
+            background: #16213e;
+            color: #eee;
+            font-size: 12px;
+        }
+        .playlist-add-row input[type="text"]::placeholder {
+            color: #666;
+        }
+        .btn-playlist-add {
+            padding: 8px 18px;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            background: #ffca28;
+            color: #1a1a2e;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+        .btn-playlist-add:hover { background: #e6b800; }
+
+        /* プレイリストアイテム */
+        .playlist-items {
+            max-height: 300px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .playlist-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            background: #16213e;
+            border: 1px solid #334257;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .playlist-item:hover {
+            background: #1e2d4a;
+        }
+        .playlist-item.active {
+            border-color: #00d4aa;
+            background: #00d4aa11;
+        }
+        .playlist-item .pl-thumb {
+            width: 50px;
+            height: 50px;
+            border-radius: 6px;
+            object-fit: cover;
+            background: #000;
+            flex-shrink: 0;
+        }
+        .playlist-item .pl-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .playlist-item .pl-name {
+            font-size: 12px;
+            font-weight: bold;
+            color: #eee;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .playlist-item .pl-params {
+            font-size: 10px;
+            color: #888;
+            margin-top: 2px;
+        }
+        .playlist-item .pl-delete {
+            background: #e94560;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .playlist-item .pl-delete:hover {
+            background: #c0392b;
+        }
+        .playlist-item .pl-reorder {
+            color: #555;
+            font-size: 16px;
+            cursor: grab;
+            padding: 0 4px;
+            flex-shrink: 0;
+        }
+
+        /* プレイヤーコントロールバー */
+        .player-controls {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 15px;
+            padding: 12px;
+            background: #16213e;
+            border-radius: 12px;
+            border: 1px solid #334257;
+            flex-wrap: wrap;
+        }
+        .player-btn {
+            width: 44px;
+            height: 44px;
+            border: none;
+            border-radius: 50%;
+            background: #00d4aa;
+            color: #1a1a2e;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+        .player-btn:hover {
+            background: #00b894;
+        }
+        .player-btn.play-btn {
+            width: 56px;
+            height: 56px;
+            font-size: 24px;
+        }
+        .player-btn.toggle-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            font-size: 13px;
+            background: #334257;
+            color: #888;
+        }
+        .player-btn.toggle-btn.active {
+            background: #00d4aa;
+            color: #1a1a2e;
+        }
+        .player-progress {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+            min-width: 200px;
+        }
+        .player-progress input[type="range"] {
+            flex: 1;
+            -webkit-appearance: none;
+            appearance: none;
+            height: 4px;
+            background: #334257;
+            border-radius: 2px;
+            outline: none;
+        }
+        .player-progress input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px;
+            height: 14px;
+            background: #00d4aa;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        .player-progress .time-label {
+            font-size: 11px;
+            color: #888;
+            white-space: nowrap;
+            min-width: 30px;
+        }
+        .player-speed {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .player-speed select {
+            background: #16213e;
+            color: #eee;
+            border: 1px solid #334257;
+            border-radius: 4px;
+            padding: 4px 6px;
+            font-size: 11px;
+        }
+
+        /* プレイリスト空表示 */
+        .playlist-empty {
+            text-align: center;
+            color: #555;
+            font-size: 12px;
+            padding: 20px;
+        }
+
+        /* ドラッグ中のスタイル */
+        .playlist-item.dragging {
+            opacity: 0.5;
+        }
+        .playlist-item.drag-over {
+            border: 2px dashed #00d4aa;
+        }
+    </style>
+</head>
+<body onkeydown="handleKeyDown(event)">
+    <div class="container">
+        <h1>4方向画像結合</h1>
+        <div id="status">画像を選択してください (左ドラッグ:距離 / 右ドラッグ:正方形)</div>
+
+        <!-- 一括読み込みエリア -->
+        <div class="bulk-upload-area">
+            <span class="bulk-label">📂 一括読み込み</span>
+            <span class="bulk-hint">
+                ファイル名末尾で自動割り当て：<br>
+                <code style="color:#ffca28;">_f</code> 正面　
+                <code style="color:#ffca28;">_b</code> 背面　
+                <code style="color:#ffca28;">_r</code> 右側面　
+                <code style="color:#ffca28;">_l</code> 左側面
+            </span>
+            <button class="bulk-btn" onclick="document.getElementById('file-bulk').click()">📁 複数選択…</button>
+            <input type="file" id="file-bulk" accept="image/*" multiple style="display:none;" onchange="handleBulkFiles(this)">
+        </div>
+
+        <div class="upload-section">
+            <div class="upload-box" id="box-front" onclick="document.getElementById('file-front').click()">
+                <input type="file" id="file-front" accept="image/*" onchange="handleFile(this.files[0], 'front')">
+                <div style="font-size:11px;">⬇ 正面</div>
+                <img class="preview-img" id="preview-front" style="display:none;">
+                <button class="remove-btn" onclick="event.stopPropagation(); removeImage('front')" id="btn-front" style="display:none;">×</button>
+            </div>
+            <div class="upload-box" id="box-back" onclick="document.getElementById('file-back').click()">
+                <input type="file" id="file-back" accept="image/*" onchange="handleFile(this.files[0], 'back')">
+                <div style="font-size:11px;">⬆ 背面</div>
+                <img class="preview-img" id="preview-back" style="display:none;">
+                <button class="remove-btn" onclick="event.stopPropagation(); removeImage('back')" id="btn-back" style="display:none;">×</button>
+            </div>
+            <div class="upload-box" id="box-left" onclick="document.getElementById('file-left').click()">
+                <input type="file" id="file-left" accept="image/*" onchange="handleFile(this.files[0], 'left')">
+                <div style="font-size:11px;">⬅ 左側面</div>
+                <img class="preview-img" id="preview-left" style="display:none;">
+                <button class="remove-btn" onclick="event.stopPropagation(); removeImage('left')" id="btn-left" style="display:none;">×</button>
+            </div>
+            <div class="upload-box" id="box-right" onclick="document.getElementById('file-right').click()">
+                <input type="file" id="file-right" accept="image/*" onchange="handleFile(this.files[0], 'right')">
+                <div style="font-size:11px;">➡ 右側面</div>
+                <img class="preview-img" id="preview-right" style="display:none;">
+                <button class="remove-btn" onclick="event.stopPropagation(); removeImage('right')" id="btn-right" style="display:none;">×</button>
+            </div>
+        </div>
+
+        <div class="preview-section">
+            <div class="option-panel">
+                <div class="option-item">
+                    <label>透過設定：</label>
+                    <select id="bgType" onchange="updateUI()">
+                        <option value="black" selected>黒を透過</option>
+                        <option value="white">白を透過</option>
+                        <option value="none">透過なし</option>
+                    </select>
+                </div>
+                <div class="option-item">
+                    <label>ズーム：<span id="zoomVal">1.00x</span></label>
+                    <input type="range" id="zoomRange" min="0.1" max="2.5" step="0.01" value="1.0" oninput="updateUI()">
+                </div>
+                <div class="option-item">
+                    <label>中心からの距離：<span id="distVal">0px</span></label>
+                    <input type="range" id="distRange" min="-1500" max="1500" step="1" value="0" oninput="updateUI()">
+                </div>
+                <div class="option-item">
+                    <label>中心正方形：<span id="centralSqVal">自動</span></label>
+                    <input type="range" id="centralSqRange" min="0" max="1000" step="1" value="0" oninput="updateUI()">
+                </div>
+                <div class="option-item" style="flex-direction:row; align-items:center; padding-top:10px;">
+                    <input type="checkbox" id="feetToCenter" onchange="generateImage()">
+                    <label for="feetToCenter" style="margin-left:8px; cursor:pointer;">足を中央へ</label>
+                </div>
+            </div>
+
+            <!-- 編集プレビュー -->
+            <div id="edit-preview-wrapper">
+                <button class="fullscreen-btn" id="fs-btn" onclick="toggleFullscreen()">⛶</button>
+                <canvas id="resultCanvas"></canvas>
+            </div>
+
+            <button class="btn" onclick="downloadImage()">💾 画像を保存する</button>
+        </div>
+
+        <!-- ===== プレイリストセクション ===== -->
+        <div class="playlist-section">
+            <h2>
+                🎵 プレイリスト
+                <span class="playlist-count" id="playlist-count">0</span>
+            </h2>
+
+            <!-- プレイリスト追加 -->
+            <div class="playlist-add-row">
+                <input type="text" id="playlist-name-input" placeholder="プレイリスト名（空欄可）">
+                <button class="btn-playlist-add" onclick="addToPlaylist()">↓ プレイリストに追加</button>
+                <button class="btn-playlist-add" style="background:#3498db; color:#fff;" onclick="restoreFromPlaylist()">↑ プレイリストから再編集</button>
+                <button class="btn-playlist-add" style="background:#e94560; color:#fff;" onclick="clearPlaylist()">🗑 全削除</button>
+            </div>
+
+            <!-- プレイリストアイテム -->
+            <div class="playlist-items" id="playlist-items">
+                <div class="playlist-empty">プレイリストは空です。現在の設定を追加してください。</div>
+            </div>
+
+            <!-- プレイヤーコントロール -->
+            <div class="player-controls" id="player-controls" style="display:none;">
+                <div class="player-progress">
+                    <span class="time-label" id="pl-current-idx">0/0</span>
+                    <input type="range" id="pl-progress" min="0" max="0" value="0" oninput="seekPlaylist(this.value)">
+                    <span class="time-label" id="pl-total">0</span>
+                </div>
+                <button class="player-btn toggle-btn" id="btn-random" onclick="toggleRandom()" title="ランダム">🔀</button>
+                <button class="player-btn toggle-btn" id="btn-repeat" onclick="toggleRepeat()" title="リピート">🔁</button>
+                <button class="player-btn" onclick="prevPlaylist()" title="前へ">⏮</button>
+                <button class="player-btn play-btn" id="btn-play" onclick="togglePlay()" title="再生/停止">▶</button>
+                <button class="player-btn" onclick="nextPlaylist()" title="次へ">⏭</button>
+                <div class="player-speed">
+                    <select id="play-speed" onchange="setPlaySpeed(this.value)">
+                        <option value="500">0.5s</option>
+                        <option value="1000" selected>1s</option>
+                        <option value="2000">2s</option>
+                        <option value="3000">3s</option>
+                        <option value="5000">5s</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== プレイリストプレビュー（常時表示） ===== -->
+        <div class="playlist-preview-section" id="playlist-preview-section" style="display:none;">
+            <h2>
+                🎬 プレイリストプレビュー
+                <span class="playing-badge" id="playing-badge">再生中</span>
+            </h2>
+            <div id="playlist-preview-wrapper">
+                <button class="fullscreen-btn" id="plp-fs-btn" onclick="togglePlaylistFullscreen()">⛶</button>
+                <canvas id="playlistCanvas"></canvas>
+            </div>
+            <div class="playlist-preview-info">
+                <div class="plp-name" id="plp-name">-</div>
+                <div class="plp-params" id="plp-params">-</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const rawImages = { front: null, back: null, right: null, left: null };
+        let baseRes = { width: 1000, height: 1000 };
+        let currentRotation = 0;
+
+        // ===== プレイリスト関連 =====
+        let playlist = [];
+        let currentPlaylistIndex = -1;
+        let isPlaying = false;
+        let isRandom = false;
+        let isRepeat = false;
+        let playInterval = null;
+        let playSpeed = 1000;
+        let playedIndices = [];
+
+        function setStatus(msg) { document.getElementById('status').textContent = msg; }
+
+        function detectPosFromFilename(filename) {
+            const base = filename.replace(/\.[^.]+$/, '');
+            if (/_f$/i.test(base)) return 'front';
+            if (/_b$/i.test(base)) return 'back';
+            if (/_r$/i.test(base)) return 'right';
+            if (/_l$/i.test(base)) return 'left';
+            return null;
+        }
+
+        async function handleBulkFiles(input) {
+            const files = Array.from(input.files);
+            if (files.length === 0) return;
+
+            const assigned = [];
+            const unassigned = [];
+
+            for (const file of files) {
+                const pos = detectPosFromFilename(file.name);
+                if (pos) {
+                    assigned.push({ file, pos });
+                } else {
+                    unassigned.push(file.name);
+                }
+            }
+
+            if (assigned.length === 0) {
+                setStatus('⚠ 割り当てできるファイルがありません（_f/_b/_r/_l をファイル名末尾に付けてください）');
+                input.value = '';
+                return;
+            }
+
+            setStatus(`処理中... (${assigned.length}件)`);
+
+            let doneCount = 0;
+            const total = assigned.length;
+
+            for (const { file, pos } of assigned) {
+                await loadImageToPos(file, pos);
+                doneCount++;
+                setStatus(`読み込み中... ${doneCount}/${total}`);
+            }
+
+            calculateLayout();
+            updateUI();
+
+            let msg = `✅ ${total}件読み込み完了`;
+            if (unassigned.length > 0) {
+                msg += `　⚠ 未割り当て: ${unassigned.join(', ')}`;
+            }
+            setStatus(msg);
+            input.value = '';
+        }
+
+        function loadImageToPos(file, pos) {
+            return new Promise((resolve) => {
+                const url = URL.createObjectURL(file);
+                const img = new Image();
+                img.onload = () => {
+                    const maxDim = 2000;
+                    if (img.width > maxDim || img.height > maxDim) {
+                        const scale = maxDim / Math.max(img.width, img.height);
+                        const cvs = document.createElement('canvas');
+                        cvs.width = img.width * scale;
+                        cvs.height = img.height * scale;
+                        cvs.getContext('2d').drawImage(img, 0, 0, cvs.width, cvs.height);
+                        const rImg = new Image();
+                        rImg.src = cvs.toDataURL('image/png');
+                        rImg.onload = () => {
+                            rawImages[pos] = rImg;
+                            updateBox(pos);
+                            URL.revokeObjectURL(url);
+                            resolve();
+                        };
+                    } else {
+                        rawImages[pos] = img;
+                        updateBox(pos);
+                        URL.revokeObjectURL(url);
+                        resolve();
+                    }
+                };
+                img.src = url;
+            });
+        }
+
+        function updateBox(pos) {
+            document.getElementById('preview-' + pos).src = rawImages[pos].src;
+            document.getElementById('preview-' + pos).style.display = 'block';
+            document.getElementById('box-' + pos).classList.add('has-image');
+            document.getElementById('btn-' + pos).style.display = 'block';
+        }
+
+        async function handleFile(file, pos) {
+            if (!file) return;
+            setStatus("処理中...");
+            await loadImageToPos(file, pos);
+            calculateLayout();
+            updateUI();
+            setStatus("読み込み完了");
+        }
+
+        function finish(pos) {
+            updateBox(pos);
+            calculateLayout();
+            updateUI();
+            setStatus("読み込み完了");
+        }
+
+        function removeImage(pos) {
+            rawImages[pos] = null;
+            document.getElementById('preview-' + pos).style.display = 'none';
+            document.getElementById('box-' + pos).classList.remove('has-image');
+            document.getElementById('btn-' + pos).style.display = 'none';
+            generateImage();
+        }
+
+        function calculateLayout() {
+            const loaded = Object.values(rawImages).filter(i => i);
+            if (loaded.length === 0) return;
+            const maxW = Math.max(...loaded.map(i => i.width));
+            const maxH = Math.max(...loaded.map(i => i.height));
+            const sideLen = Math.max(maxW, maxH);
+            const totalSize = Math.min(4000, sideLen * 3);
+            baseRes = { width: totalSize, height: totalSize };
+            document.getElementById('centralSqRange').max = Math.floor(totalSize / 2);
+        }
+
+        function updateUI() {
+            document.getElementById('zoomVal').textContent = parseFloat(document.getElementById('zoomRange').value).toFixed(2) + 'x';
+            document.getElementById('distVal').textContent = document.getElementById('distRange').value + 'px';
+            const sqV = document.getElementById('centralSqRange').value;
+            document.getElementById('centralSqVal').textContent = sqV == 0 ? "自動" : sqV + "px";
+            generateImage();
+        }
+
+        function getTransparentCanvas(img, type) {
+            if (!img || type === 'none') return img;
+            const c = document.createElement('canvas');
+            const ctx = c.getContext('2d');
+            c.width = img.width; c.height = img.height;
+            ctx.drawImage(img, 0, 0);
+            const id = ctx.getImageData(0, 0, c.width, c.height);
+            const d = id.data; const th = 40;
+            for (let i = 0; i < d.length; i += 4) {
+                if (type === 'black' && d[i]<th && d[i+1]<th && d[i+2]<th) d[i+3]=0;
+                if (type === 'white' && d[i]>255-th && d[i+1]>255-th && d[i+2]>255-th) d[i+3]=0;
+            }
+            ctx.putImageData(id, 0, 0);
+            return c;
+        }
+
+        function generateImage() {
+            const canvas = document.getElementById('resultCanvas');
+            const ctx = canvas.getContext('2d');
+            if (!Object.values(rawImages).some(i => i)) return;
+
+            const zoom = parseFloat(document.getElementById('zoomRange').value);
+            const distPx = parseInt(document.getElementById('distRange').value);
+            const f2c = document.getElementById('feetToCenter').checked;
+            const bgType = document.getElementById('bgType').value;
+
+            if (currentRotation % 180 === 0) {
+                canvas.width = baseRes.width; canvas.height = baseRes.height;
+            } else {
+                canvas.width = baseRes.height; canvas.height = baseRes.width;
+            }
+
+            ctx.fillStyle = "#000"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.save();
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+            ctx.rotate((currentRotation * Math.PI) / 180);
+            ctx.translate(-baseRes.width / 2, -baseRes.height / 2);
+
+            const cx = baseRes.width / 2, cy = baseRes.height / 2;
+
+            // 距離の定義: 正面図の上辺からプレビュー中心までの最短距離
+            // distPx > 0: 正面図の上辺が中心より下（標準的な配置）
+            // distPx < 0: 正面図の上辺が中心より上（中央に寄る）
+            // 各画像の配置位置 = 中心 ± (distPx + 画像高さ/2 * zoom)
+            // 正面図の上辺 = cy + off - (front.height * zoom / 2) = cy + distPx
+            // → off = distPx + (front.height * zoom / 2)
+
+            const draw = (img, x, y, rot, flipY, clip) => {
+                if (!img) return;
+                const tImg = getTransparentCanvas(img, bgType);
+                ctx.save();
+                ctx.beginPath(); ctx.rect(clip.x, clip.y, clip.w, clip.h); ctx.clip();
+                ctx.translate(x, y);
+                if (rot) ctx.rotate(rot);
+                if (flipY) ctx.scale(1, -1);
+                // ズーム: 各画像の中心を基準
+                ctx.drawImage(tImg, -(tImg.width*zoom)/2, -(tImg.height*zoom)/2, tImg.width*zoom, tImg.height*zoom);
+                ctx.restore();
+            };
+
+            const clips = {
+                t: { x: 0, y: 0, w: baseRes.width, h: cy }, b: { x: 0, y: cy, w: baseRes.width, h: cy },
+                l: { x: 0, y: 0, w: cx, h: baseRes.height }, r: { x: cx, y: 0, w: cx, h: baseRes.height }
+            };
+
+            // 各画像の中心位置を計算
+            // 正面図: 上辺 = cy + distPx となるように配置
+            // → 中心 y = cy + distPx + (front.height * zoom / 2)
+            const frontH = rawImages.front ? rawImages.front.height * zoom : 0;
+            const backH = rawImages.back ? rawImages.back.height * zoom : 0;
+            const leftW = rawImages.left ? rawImages.left.width * zoom : 0;
+            const rightW = rawImages.right ? rawImages.right.width * zoom : 0;
+
+            // 正面図の中心位置: 上辺が cy + distPx になるように
+            const frontCy = cy + distPx + frontH / 2;
+            // 背面図: 上辺が cy - distPx - backH になるように（対称）
+            const backCy = cy - distPx - backH / 2;
+            // 左側面: 右辺が cx - distPx - leftW/2 になるように
+            const leftCx = cx - distPx - leftW / 2;
+            // 右側面: 左辺が cx + distPx + rightW/2 になるように
+            const rightCx = cx + distPx + rightW / 2;
+
+            draw(rawImages.back,  cx, backCy, 0, !f2c, clips.t);
+            draw(rawImages.front, cx, frontCy, 0, f2c, clips.b);
+            draw(rawImages.left,  leftCx, cy, f2c ? -Math.PI/2 : Math.PI/2, false, clips.l);
+            draw(rawImages.right, rightCx, cy, f2c ? Math.PI/2 : -Math.PI/2, false, clips.r);
+
+            let sqSize = parseInt(document.getElementById('centralSqRange').value);
+            if (sqSize === 0) {
+                // 自動計算: 正面図と背面図の間の隙間に合わせる
+                const gap = (backCy + backH / 2) - (frontCy - frontH / 2);
+                sqSize = Math.max(0, gap);
+            }
+            if (sqSize > 0) { ctx.fillStyle = "#000"; ctx.fillRect(cx - sqSize/2, cy - sqSize/2, sqSize, sqSize); }
+            ctx.restore();
+        }
+
+        // --- インタラクティブ操作イベント ---
+        const wrapper = document.getElementById('edit-preview-wrapper');
+        let isDragging = false;
+        let dragButton = 0;
+        let startY = 0;
+        let initialVal = 0;
+
+        wrapper.oncontextmenu = (e) => e.preventDefault();
+
+        wrapper.onmousedown = (e) => {
+            isDragging = true;
+            dragButton = e.button;
+            startY = e.clientY;
+            initialVal = (dragButton === 0) 
+                ? parseInt(document.getElementById('distRange').value) 
+                : parseInt(document.getElementById('centralSqRange').value);
+        };
+
+        window.onmousemove = (e) => {
+            if (!isDragging) return;
+            const diff = (e.clientY - startY) / 2;
+            if (dragButton === 0) {
+                const minDist = parseInt(document.getElementById('distRange').min);
+                const maxDist = parseInt(document.getElementById('distRange').max);
+                document.getElementById('distRange').value = Math.max(minDist, Math.min(maxDist, initialVal + diff));
+            } else {
+                const maxSq = parseInt(document.getElementById('centralSqRange').max);
+                document.getElementById('centralSqRange').value = Math.max(0, Math.min(maxSq, initialVal + diff));
+            }
+            updateUI();
+        };
+
+        window.onmouseup = () => { isDragging = false; };
+
+        wrapper.onwheel = (e) => {
+            e.preventDefault();
+            const z = document.getElementById('zoomRange');
+            z.value = parseFloat(z.value) + (e.deltaY < 0 ? 0.05 : -0.05);
+            updateUI();
+        };
+
+        function handleKeyDown(e) {
+            if (e.key === "ArrowRight") { currentRotation = (currentRotation + 90) % 360; generateImage(); }
+            if (e.key === "ArrowLeft") { currentRotation = (currentRotation - 90 + 360) % 360; generateImage(); }
+            if (e.key === "Escape") {
+                if (isPseudoFullscreen) {
+                    toggleFullscreen();
+                }
+                if (isPlaylistPseudoFullscreen) {
+                    togglePlaylistFullscreen();
+                }
+            }
+        }
+
+        let pinchStartDist = 0;
+        let pinchStartZoom = 1;
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let isSwiping = false;
+
+        function getTouchDist(touches) {
+            const dx = touches[0].clientX - touches[1].clientX;
+            const dy = touches[0].clientY - touches[1].clientY;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        wrapper.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 2) {
+                isDragging = false;
+                isSwiping = false;
+                pinchStartDist = getTouchDist(e.touches);
+                pinchStartZoom = parseFloat(document.getElementById('zoomRange').value);
+            } else if (e.touches.length === 1) {
+                touchStartX = e.touches[0].clientX;
+                touchStartY = e.touches[0].clientY;
+                isDragging = false;
+                isSwiping = false;
+            }
+        }, { passive: true });
+
+        wrapper.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (e.touches.length === 2) {
+                isDragging = false;
+                isSwiping = false;
+                const dist = getTouchDist(e.touches);
+                const scale = dist / pinchStartDist;
+                const z = document.getElementById('zoomRange');
+                const newZoom = Math.min(parseFloat(z.max), Math.max(parseFloat(z.min), pinchStartZoom * scale));
+                z.value = newZoom;
+                updateUI();
+            } else if (e.touches.length === 1) {
+                const dx = e.touches[0].clientX - touchStartX;
+                const dy = e.touches[0].clientY - touchStartY;
+
+                if (!isDragging && !isSwiping) {
+                    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 8) {
+                        isSwiping = true;
+                    } else if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 8) {
+                        isDragging = true;
+                        dragButton = 0;
+                        startY = touchStartY;
+                        initialVal = parseInt(document.getElementById('distRange').value);
+                    }
+                }
+
+                if (isDragging) {
+                    window.onmousemove({ clientY: e.touches[0].clientY });
+                }
+            }
+        }, { passive: false });
+
+        wrapper.addEventListener('touchend', (e) => {
+            if (e.changedTouches.length > 0 && isSwiping) {
+                const dx = e.changedTouches[0].clientX - touchStartX;
+                const SWIPE_THRESHOLD = 40;
+                if (dx > SWIPE_THRESHOLD) {
+                    currentRotation = (currentRotation - 90 + 360) % 360;
+                    generateImage();
+                } else if (dx < -SWIPE_THRESHOLD) {
+                    currentRotation = (currentRotation + 90) % 360;
+                    generateImage();
+                }
+            }
+            if (e.touches.length < 2) pinchStartDist = 0;
+            if (e.touches.length === 0) { isDragging = false; isSwiping = false; }
+        }, { passive: true });
+
+        const fsBtn = document.getElementById('fs-btn');
+        fsBtn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleFullscreen();
+        }, { passive: false });
+        fsBtn.addEventListener('touchstart', (e) => {
+            e.stopPropagation();
+        }, { passive: true });
+
+        const plpFsBtn = document.getElementById('plp-fs-btn');
+        if (plpFsBtn) {
+            plpFsBtn.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                togglePlaylistFullscreen();
+            }, { passive: false });
+            plpFsBtn.addEventListener('touchstart', (e) => {
+                e.stopPropagation();
+            }, { passive: true });
+        }
+
+        let isPseudoFullscreen = false;
+        let isPlaylistPseudoFullscreen = false;
+
+        function toggleFullscreen() {
+            const el = document.getElementById('edit-preview-wrapper');
+            const btn = el.querySelector('.fullscreen-btn');
+            if (isPseudoFullscreen) {
+                isPseudoFullscreen = false;
+                el.classList.remove('pseudo-fullscreen');
+                btn.textContent = '⛶';
+                document.body.style.overflow = '';
+            } else {
+                isPseudoFullscreen = true;
+                el.classList.add('pseudo-fullscreen');
+                btn.textContent = '✕';
+                document.body.style.overflow = 'hidden';
+            }
+        }
+
+        function togglePlaylistFullscreen() {
+            const el = document.getElementById('playlist-preview-wrapper');
+            const btn = el.querySelector('.fullscreen-btn');
+            if (isPlaylistPseudoFullscreen) {
+                isPlaylistPseudoFullscreen = false;
+                el.classList.remove('pseudo-fullscreen');
+                btn.textContent = '⛶';
+                document.body.style.overflow = '';
+            } else {
+                isPlaylistPseudoFullscreen = true;
+                el.classList.add('pseudo-fullscreen');
+                btn.textContent = '✕';
+                document.body.style.overflow = 'hidden';
+            }
+        }
+
+        function downloadImage() {
+            const link = document.createElement('a');
+            link.download = 'combined_view.png';
+            link.href = document.getElementById('resultCanvas').toDataURL();
+            link.click();
+        }
+
+        // ============================================================
+        // プレイリスト機能
+        // ============================================================
+
+        function addToPlaylist() {
+            const loaded = Object.values(rawImages).filter(i => i);
+            if (loaded.length === 0) {
+                setStatus('⚠ 画像が読み込まれていません');
+                return;
+            }
+
+            const nameInput = document.getElementById('playlist-name-input');
+            const name = nameInput.value.trim() || `アイテム ${playlist.length + 1}`;
+
+            const imageData = {};
+            ['front','back','left','right'].forEach(pos => {
+                if (rawImages[pos]) {
+                    const c = document.createElement('canvas');
+                    c.width = rawImages[pos].width;
+                    c.height = rawImages[pos].height;
+                    c.getContext('2d').drawImage(rawImages[pos], 0, 0);
+                    imageData[pos] = c.toDataURL('image/png');
+                }
+            });
+
+            const item = {
+                id: Date.now() + Math.random(),
+                name: name,
+                images: imageData,
+                bgType: document.getElementById('bgType').value,
+                zoom: parseFloat(document.getElementById('zoomRange').value),
+                dist: parseInt(document.getElementById('distRange').value),
+                centralSq: parseInt(document.getElementById('centralSqRange').value),
+                feetToCenter: document.getElementById('feetToCenter').checked,
+                rotation: currentRotation
+            };
+
+            playlist.push(item);
+            nameInput.value = '';
+            renderPlaylist();
+            setStatus(`✅ 「${name}」をプレイリストに追加しました`);
+        }
+
+        function restoreFromPlaylist() {
+            if (playlist.length === 0) {
+                setStatus('⚠ プレイリストが空です');
+                return;
+            }
+            if (currentPlaylistIndex < 0 || currentPlaylistIndex >= playlist.length) {
+                currentPlaylistIndex = 0;
+            }
+            const item = playlist[currentPlaylistIndex];
+
+            // 画像を復元
+            const loadPromises = [];
+            ['front','back','left','right'].forEach(pos => {
+                if (item.images[pos]) {
+                    const p = new Promise(resolve => {
+                        const img = new Image();
+                        img.onload = () => {
+                            rawImages[pos] = img;
+                            updateBox(pos);
+                            resolve();
+                        };
+                        img.src = item.images[pos];
+                    });
+                    loadPromises.push(p);
+                } else {
+                    rawImages[pos] = null;
+                    document.getElementById('preview-' + pos).style.display = 'none';
+                    document.getElementById('box-' + pos).classList.remove('has-image');
+                    document.getElementById('btn-' + pos).style.display = 'none';
+                }
+            });
+
+            Promise.all(loadPromises).then(() => {
+                calculateLayout();
+                document.getElementById('bgType').value = item.bgType;
+                document.getElementById('zoomRange').value = item.zoom;
+                document.getElementById('distRange').value = item.dist;
+                document.getElementById('centralSqRange').value = item.centralSq;
+                document.getElementById('feetToCenter').checked = item.feetToCenter;
+                currentRotation = item.rotation || 0;
+                updateUI();
+                setStatus(`✅ 「${item.name}」を編集プレビューに復元しました`);
+            });
+        }
+
+        function renderPlaylist() {
+            const container = document.getElementById('playlist-items');
+            const countEl = document.getElementById('playlist-count');
+            const controls = document.getElementById('player-controls');
+            const previewSection = document.getElementById('playlist-preview-section');
+
+            countEl.textContent = playlist.length;
+
+            if (playlist.length === 0) {
+                container.innerHTML = '<div class="playlist-empty">プレイリストは空です。現在の設定を追加してください。</div>';
+                controls.style.display = 'none';
+                previewSection.style.display = 'none';
+                return;
+            }
+
+            controls.style.display = 'flex';
+            previewSection.style.display = 'block';
+
+            // プレイリストプレビューに最初のアイテムを表示（まだ表示されていない場合）
+            if (currentPlaylistIndex < 0) {
+                currentPlaylistIndex = 0;
+            }
+            renderPlaylistPreview();
+
+            container.innerHTML = '';
+            playlist.forEach((item, idx) => {
+                const el = document.createElement('div');
+                el.className = 'playlist-item' + (idx === currentPlaylistIndex ? ' active' : '');
+                el.draggable = true;
+                el.dataset.index = idx;
+
+                let thumbSrc = '';
+                for (const pos of ['front','back','left','right']) {
+                    if (item.images[pos]) { thumbSrc = item.images[pos]; break; }
+                }
+
+                const paramStr = `透過:${item.bgType==='black'?'黒':item.bgType==='white'?'白':'なし'} / ズーム:${item.zoom.toFixed(2)}x / 距離:${item.dist}px / 正方形:${item.centralSq===0?'自動':item.centralSq+'px'}`;
+
+                el.innerHTML = `
+                    <span class="pl-reorder">⋮⋮</span>
+                    <img class="pl-thumb" src="${thumbSrc || ''}" alt="">
+                    <div class="pl-info">
+                        <div class="pl-name">${escapeHtml(item.name)}</div>
+                        <div class="pl-params">${paramStr}</div>
+                    </div>
+                    <button class="pl-delete" onclick="event.stopPropagation(); deletePlaylistItem(${idx})" title="削除">×</button>
+                `;
+
+                el.onclick = () => {
+                    currentPlaylistIndex = idx;
+                    renderPlaylistPreview();
+                    renderPlaylist();
+                };
+
+                el.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('text/plain', idx);
+                    el.classList.add('dragging');
+                });
+                el.addEventListener('dragend', () => {
+                    el.classList.remove('dragging');
+                    document.querySelectorAll('.playlist-item').forEach(i => i.classList.remove('drag-over'));
+                });
+                el.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    el.classList.add('drag-over');
+                });
+                el.addEventListener('dragleave', () => {
+                    el.classList.remove('drag-over');
+                });
+                el.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    const fromIdx = parseInt(e.dataTransfer.getData('text/plain'));
+                    const toIdx = parseInt(el.dataset.index);
+                    if (fromIdx !== toIdx) {
+                        const moved = playlist.splice(fromIdx, 1)[0];
+                        playlist.splice(toIdx, 0, moved);
+                        if (currentPlaylistIndex === fromIdx) currentPlaylistIndex = toIdx;
+                        else if (fromIdx < currentPlaylistIndex && toIdx >= currentPlaylistIndex) currentPlaylistIndex--;
+                        else if (fromIdx > currentPlaylistIndex && toIdx <= currentPlaylistIndex) currentPlaylistIndex++;
+                        renderPlaylist();
+                    }
+                });
+
+                container.appendChild(el);
+            });
+
+            updatePlayerProgress();
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function deletePlaylistItem(idx) {
+            playlist.splice(idx, 1);
+            if (currentPlaylistIndex >= idx) currentPlaylistIndex--;
+            if (currentPlaylistIndex < 0 && playlist.length > 0) currentPlaylistIndex = 0;
+            if (playlist.length === 0) {
+                currentPlaylistIndex = -1;
+                stopPlaylist();
+            }
+            renderPlaylist();
+        }
+
+        function clearPlaylist() {
+            if (!confirm('プレイリストを全て削除しますか？')) return;
+            playlist = [];
+            currentPlaylistIndex = -1;
+            stopPlaylist();
+            renderPlaylist();
+        }
+
+        // ===== プレイリストプレビュー描画 =====
+        function renderPlaylistPreview() {
+            if (currentPlaylistIndex < 0 || currentPlaylistIndex >= playlist.length) return;
+            const item = playlist[currentPlaylistIndex];
+
+            const canvas = document.getElementById('playlistCanvas');
+            const ctx = canvas.getContext('2d');
+
+            const imgPromises = [];
+            const imgs = {};
+            ['front','back','left','right'].forEach(pos => {
+                if (item.images[pos]) {
+                    imgPromises.push(new Promise(resolve => {
+                        const img = new Image();
+                        img.onload = () => { imgs[pos] = img; resolve(); };
+                        img.src = item.images[pos];
+                    }));
+                }
+            });
+
+            Promise.all(imgPromises).then(() => {
+                const loaded = Object.values(imgs);
+                if (loaded.length === 0) return;
+
+                const maxW = Math.max(...loaded.map(i => i.width));
+                const maxH = Math.max(...loaded.map(i => i.height));
+                const sideLen = Math.max(maxW, maxH);
+                const totalSize = Math.min(4000, sideLen * 3);
+                const pBaseRes = { width: totalSize, height: totalSize };
+
+                canvas.width = pBaseRes.width;
+                canvas.height = pBaseRes.height;
+
+                ctx.fillStyle = "#000";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                const zoom = item.zoom;
+                const distPx = item.dist;
+                const f2c = item.feetToCenter;
+                const bgType = item.bgType;
+                const rotation = item.rotation || 0;
+
+                ctx.save();
+                ctx.translate(canvas.width / 2, canvas.height / 2);
+                ctx.rotate((rotation * Math.PI) / 180);
+                ctx.translate(-pBaseRes.width / 2, -pBaseRes.height / 2);
+
+                const cx = pBaseRes.width / 2, cy = pBaseRes.height / 2;
+
+                const draw = (img, x, y, rot, flipY, clip) => {
+                    if (!img) return;
+                    const tImg = getTransparentCanvas(img, bgType);
+                    ctx.save();
+                    ctx.beginPath(); ctx.rect(clip.x, clip.y, clip.w, clip.h); ctx.clip();
+                    ctx.translate(x, y);
+                    if (rot) ctx.rotate(rot);
+                    if (flipY) ctx.scale(1, -1);
+                    ctx.drawImage(tImg, -(tImg.width*zoom)/2, -(tImg.height*zoom)/2, tImg.width*zoom, tImg.height*zoom);
+                    ctx.restore();
+                };
+
+                const clips = {
+                    t: { x: 0, y: 0, w: pBaseRes.width, h: cy },
+                    b: { x: 0, y: cy, w: pBaseRes.width, h: cy },
+                    l: { x: 0, y: 0, w: cx, h: pBaseRes.height },
+                    r: { x: cx, y: 0, w: cx, h: pBaseRes.height }
+                };
+
+                const frontH = imgs.front ? imgs.front.height * zoom : 0;
+                const backH = imgs.back ? imgs.back.height * zoom : 0;
+                const leftW = imgs.left ? imgs.left.width * zoom : 0;
+                const rightW = imgs.right ? imgs.right.width * zoom : 0;
+
+                const frontCy = cy + distPx + frontH / 2;
+                const backCy = cy - distPx - backH / 2;
+                const leftCx = cx - distPx - leftW / 2;
+                const rightCx = cx + distPx + rightW / 2;
+
+                draw(imgs.back,  cx, backCy, 0, !f2c, clips.t);
+                draw(imgs.front, cx, frontCy, 0, f2c, clips.b);
+                draw(imgs.left,  leftCx, cy, f2c ? -Math.PI/2 : Math.PI/2, false, clips.l);
+                draw(imgs.right, rightCx, cy, f2c ? Math.PI/2 : -Math.PI/2, false, clips.r);
+
+                let sqSize = item.centralSq;
+                if (sqSize === 0) {
+                    const gap = (backCy + backH / 2) - (frontCy - frontH / 2);
+                    sqSize = Math.max(0, gap);
+                }
+                if (sqSize > 0) { ctx.fillStyle = "#000"; ctx.fillRect(cx - sqSize/2, cy - sqSize/2, sqSize, sqSize); }
+                ctx.restore();
+
+                // 情報更新
+                document.getElementById('plp-name').textContent = item.name;
+                const plpParams = `透過:${item.bgType==='black'?'黒':item.bgType==='white'?'白':'なし'} | ズーム:${item.zoom.toFixed(2)}x | 距離:${item.dist}px | 正方形:${item.centralSq===0?'自動':item.centralSq+'px'} | 足中央:${item.feetToCenter?'ON':'OFF'}`;
+                document.getElementById('plp-params').textContent = plpParams;
+            });
+        }
+
+        // ===== プレイヤー制御 =====
+        function togglePlay() {
+            if (isPlaying) {
+                stopPlaylist();
+            } else {
+                if (playlist.length === 0) return;
+                if (currentPlaylistIndex < 0) currentPlaylistIndex = 0;
+                startPlaylist();
+            }
+        }
+
+        function startPlaylist() {
+            isPlaying = true;
+            document.getElementById('btn-play').textContent = '⏸';
+            document.getElementById('playing-badge').classList.add('show');
+            renderPlaylistPreview();
+            playInterval = setInterval(() => {
+                nextPlaylist(true);
+            }, playSpeed);
+        }
+
+        function stopPlaylist() {
+            isPlaying = false;
+            document.getElementById('btn-play').textContent = '▶';
+            document.getElementById('playing-badge').classList.remove('show');
+            if (playInterval) {
+                clearInterval(playInterval);
+                playInterval = null;
+            }
+        }
+
+        function nextPlaylist(auto = false) {
+            if (playlist.length === 0) return;
+
+            let nextIdx;
+            if (isRandom) {
+                if (playedIndices.length >= playlist.length) playedIndices = [];
+                const available = playlist.map((_, i) => i).filter(i => !playedIndices.includes(i));
+                nextIdx = available[Math.floor(Math.random() * available.length)];
+                playedIndices.push(nextIdx);
+            } else {
+                nextIdx = currentPlaylistIndex + 1;
+                if (nextIdx >= playlist.length) {
+                    if (isRepeat) {
+                        nextIdx = 0;
+                    } else {
+                        if (auto) stopPlaylist();
+                        return;
+                    }
+                }
+            }
+
+            currentPlaylistIndex = nextIdx;
+            renderPlaylistPreview();
+            renderPlaylist();
+
+            if (isPlaying && auto) {
+                clearInterval(playInterval);
+                playInterval = setInterval(() => {
+                    nextPlaylist(true);
+                }, playSpeed);
+            }
+        }
+
+        function prevPlaylist() {
+            if (playlist.length === 0) return;
+            let prevIdx = currentPlaylistIndex - 1;
+            if (prevIdx < 0) {
+                if (isRepeat) prevIdx = playlist.length - 1;
+                else return;
+            }
+            currentPlaylistIndex = prevIdx;
+            renderPlaylistPreview();
+            renderPlaylist();
+        }
+
+        function toggleRandom() {
+            isRandom = !isRandom;
+            document.getElementById('btn-random').classList.toggle('active', isRandom);
+            playedIndices = [];
+        }
+
+        function toggleRepeat() {
+            isRepeat = !isRepeat;
+            document.getElementById('btn-repeat').classList.toggle('active', isRepeat);
+        }
+
+        function setPlaySpeed(val) {
+            playSpeed = parseInt(val);
+            if (isPlaying) {
+                clearInterval(playInterval);
+                playInterval = setInterval(() => {
+                    nextPlaylist(true);
+                }, playSpeed);
+            }
+        }
+
+        function seekPlaylist(val) {
+            const idx = parseInt(val);
+            if (idx >= 0 && idx < playlist.length) {
+                currentPlaylistIndex = idx;
+                renderPlaylistPreview();
+                renderPlaylist();
+            }
+        }
+
+        function updatePlayerProgress() {
+            const progress = document.getElementById('pl-progress');
+            const current = document.getElementById('pl-current-idx');
+            const total = document.getElementById('pl-total');
+
+            progress.max = Math.max(0, playlist.length - 1);
+            progress.value = currentPlaylistIndex;
+            current.textContent = playlist.length > 0 ? `${currentPlaylistIndex + 1}/${playlist.length}` : '0/0';
+            total.textContent = playlist.length;
+        }
+
+        // 初期化
+        renderPlaylist();
+    </script>
+</body>
+</html>
