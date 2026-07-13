@@ -809,8 +809,8 @@
             };
 
             const clips = {
-                t: { x: 0, y: 0, w: baseRes.width, h: cy }, b: { x: 0, y: cy, w: baseRes.width, h: cy },
-                l: { x: 0, y: 0, w: cx, h: baseRes.height }, r: { x: cx, y: 0, w: cx, h: baseRes.height }
+                t: { x: 0, y: 0, w: baseRes.width, h: cy }, b: { x: 0, y: cy, w: baseRes.width, h: baseRes.height - cy },
+                l: { x: 0, y: 0, w: cx, h: baseRes.height }, r: { x: cx, y: 0, w: baseRes.width - cx, h: baseRes.height }
             };
 
             // 各画像の中心位置を計算
@@ -1596,9 +1596,9 @@ self.addEventListener('fetch', e => {
 
                 const clips = {
                     t: { x: 0, y: 0, w: pBaseRes.width, h: cy },
-                    b: { x: 0, y: cy, w: pBaseRes.width, h: cy },
+                    b: { x: 0, y: cy, w: pBaseRes.width, h: pBaseRes.height - cy },
                     l: { x: 0, y: 0, w: cx, h: pBaseRes.height },
-                    r: { x: cx, y: 0, w: cx, h: pBaseRes.height }
+                    r: { x: cx, y: 0, w: pBaseRes.width - cx, h: pBaseRes.height }
                 };
 
                 const frontH = imgs.front ? imgs.front.height * zoom : 0;
@@ -1753,8 +1753,31 @@ self.addEventListener('fetch', e => {
             total.textContent = playlist.length;
         }
 
+        // デフォルト画像の自動読み込み
+        async function loadDefaultImages() {
+            const defaults = { front: '素体_f.png', back: '素体_b.png', right: '素体_r.png', left: '素体_l.png' };
+            let loadedAny = false;
+            for (const [pos, filename] of Object.entries(defaults)) {
+                try {
+                    const res = await fetch(filename);
+                    if (!res.ok) continue;
+                    const blob = await res.blob();
+                    await loadImageToPos(blob, pos);
+                    loadedAny = true;
+                } catch (err) {
+                    // ファイルが存在しない場合は無視して続行
+                }
+            }
+            if (loadedAny) {
+                calculateLayout();
+                updateUI();
+                setStatus('✅ デフォルト画像を読み込みました');
+            }
+        }
+
         // 初期化
         renderPlaylist();
+        loadDefaultImages();
     </script>
 </body>
 </html>
